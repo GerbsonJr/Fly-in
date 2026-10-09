@@ -1,0 +1,6 @@
+nb_drones: 2
+start_hub: a 0 0
+hub: wall 1 0 [zone=blocked]
+end_hub: b 2 0
+connection: a-wall
+connection: wall-b
