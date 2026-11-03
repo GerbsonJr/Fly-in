@@ -1,31 +1,50 @@
 PYTHON ?= python3
-MAP ?= maps/easy/01_linear_path.txt
+VENV = .venv
+BIN = $(VENV)/bin
+PY = $(shell test -x $(BIN)/python3 && echo $(BIN)/python3 || echo $(PYTHON))
+MAP ?=
 
-.PHONY: install run run-text debug test clean lint lint-strict
+.PHONY: install run run-text debug test clean fclean lint lint-strict help
 
 install:
-	$(PYTHON) -m pip install flake8 mypy pygame
+	@test -d $(VENV) || $(PYTHON) -m venv $(VENV)
+	$(BIN)/pip install --upgrade pip
+	$(BIN)/pip install flake8 mypy pygame
 
 run:
-	$(PYTHON) main.py $(MAP)
+	$(PY) main.py $(MAP)
 
 run-text:
-	$(PYTHON) main.py $(MAP) --no-gui
+	$(PY) main.py $(MAP) --no-gui
 
 debug:
-	$(PYTHON) -m pdb main.py $(MAP)
+	$(PY) -m pdb main.py $(MAP)
 
 test:
-	$(PYTHON) -m unittest discover -s tests -t .
+	$(PY) -m unittest discover -s tests -t .
 
 clean:
 	find . -type d -name "__pycache__" -prune -exec rm -rf {} +
-	rm -rf .mypy_cache .pytest_cache venv
+	rm -rf .mypy_cache .pytest_cache
+
+fclean: clean
+	rm -rf $(VENV)
 
 lint:
-	flake8 .
-	mypy . --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
+	$(PY) -m flake8 .
+	$(PY) -m mypy . --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
 
 lint-strict:
-	flake8 .
-	mypy . --strict
+	$(PY) -m flake8 .
+	$(PY) -m mypy . --strict
+
+help:
+	@echo "make install      create .venv and install flake8, mypy, pygame"
+	@echo "make run          run (MAP=<file>; without MAP you choose from a list)"
+	@echo "make run-text     text only, no window (MAP=<file>)"
+	@echo "make debug        run under pdb (MAP=<file>)"
+	@echo "make test         run the unit tests (when the tests folder exists)"
+	@echo "make lint         flake8 + mypy"
+	@echo "make lint-strict  flake8 + mypy --strict"
+	@echo "make clean        remove caches"
+	@echo "make fclean       clean + remove .venv"

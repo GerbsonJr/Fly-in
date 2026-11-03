@@ -80,8 +80,10 @@ class FleetPlanner:
                 "no path between start_hub and end_hub "
                 "(blocked zones or disconnected network)"
             )
-        horizon = shortest + 2 * nb_drones + len(graph.zones) + 2
-        self._planner = SpaceTimePlanner(graph, horizon)
+        self._horizon_base = 2 * nb_drones + len(graph.zones) + 2
+        self._planner = SpaceTimePlanner(
+            graph, shortest + self._horizon_base
+        )
 
     def lower_bound(self) -> int:
         """Return a valid lower bound of the number of turns.
@@ -112,6 +114,16 @@ class FleetPlanner:
         rng = random.Random(self._seed)
         table = Reservations()
         routes = self._build(table, None)
+        scale = 1
+        while routes is None and scale < 8:
+            # The horizon is only a safety net; widen it and try again.
+            scale *= 2
+            self._planner = SpaceTimePlanner(
+                self._graph,
+                self._planner.shortest_cost + scale * self._horizon_base,
+            )
+            table = Reservations()
+            routes = self._build(table, None)
         if routes is None:
             raise SchedulingError("could not route every drone to the end")
         current = Score.of(routes)
@@ -136,7 +148,7 @@ class FleetPlanner:
                 stagnation = 0
             else:
                 stagnation += 1
-        return Schedule(routes)
+        return Schedule(routes).finalized()
 
     # ----------------------------------------------------------- helpers
     def _build(

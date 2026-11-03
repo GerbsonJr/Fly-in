@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fly_in.core.settings import ANSI_CODES, ANSI_RESET, UNLIMITED
+from fly_in.core.settings import ANSI_RESET, UNLIMITED
 from fly_in.network.topology import Network
 from fly_in.core.plan import Move
 from fly_in.core.timetable import Metrics
 from fly_in.core.zones import Zone
+from fly_in.display.palette import Palette
 from fly_in.playback.replay import TurnSnapshot
 
 
@@ -24,12 +25,13 @@ class ConsoleRenderer:
         """
         self._graph = graph
         self._use_color = use_color
+        self._palette = Palette()
 
     def paint(self, text: str, color: Optional[str]) -> str:
-        """Color ``text``; unknown or missing colors leave it unchanged."""
-        if not self._use_color or color is None:
+        """Color ``text``; without a color the text is unchanged."""
+        if not self._use_color:
             return text
-        code = ANSI_CODES.get(color.lower())
+        code = self._palette.ansi(color)
         if code is None:
             return text
         return f"\033[{code}m{text}{ANSI_RESET}"

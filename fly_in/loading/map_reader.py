@@ -88,7 +88,7 @@ class MapReader:
             graph.start
             graph.end
         except NetworkError as exc:
-            raise ParseError(str(exc)) from exc
+            raise ParseError(f"end of file reached: {exc}") from exc
         return MapData(nb_drones, graph)
 
     # ---------------------------------------------------------- helpers
@@ -102,12 +102,17 @@ class MapReader:
                 line_no,
             )
         value = value.strip()
-        if not value.isdigit() or int(value) <= 0:
+        if not MapReader._is_positive_int(value):
             raise ParseError(
                 f"nb_drones must be a positive integer, got '{value}'",
                 line_no,
             )
         return int(value)
+
+    @staticmethod
+    def _is_positive_int(value: str) -> bool:
+        """Return True for plain ASCII digits that make a number > 0."""
+        return value.isascii() and value.isdigit() and int(value) > 0
 
     @staticmethod
     def _split_metadata(
@@ -141,7 +146,7 @@ class MapReader:
     @staticmethod
     def _parse_capacity(key: str, value: str, line_no: int) -> int:
         """Parse a strictly positive integer capacity."""
-        if not value.isdigit() or int(value) <= 0:
+        if not MapReader._is_positive_int(value):
             raise ParseError(
                 f"{key} must be a positive integer, got '{value}'", line_no
             )
@@ -177,7 +182,8 @@ class MapReader:
         if is_hub and zone_type is ZoneType.BLOCKED:
             raise ParseError(f"{prefix} cannot be a blocked zone", line_no)
         max_drones = 1
-        if "max_drones" in meta:
+        if "max_drones" in meta and prefix == "hub":
+            # On start_hub / end_hub the value is ignored, not validated.
             max_drones = self._parse_capacity(
                 "max_drones", meta["max_drones"], line_no
             )

@@ -56,6 +56,39 @@ class Schedule:
             for row in self.moves_by_turn()
         ]
 
+    def finalized(self) -> Schedule:
+        """Return the equivalent schedule that is ready to be printed.
+
+        Turns in which nothing moves are removed (every later turn comes
+        one step earlier, which keeps all the rules satisfied) and the
+        drones are renumbered by order of arrival, so D1 is the first one
+        delivered. The drones are identical, so this changes nothing else.
+        """
+        shift: list[int] = []
+        counter = 0
+        for row in self.moves_by_turn():
+            if row:
+                counter += 1
+            shift.append(counter)
+        ordered = sorted(
+            self._routes,
+            key=lambda route: (
+                route.arrival,
+                route.moves[0].turn if route.moves else 0,
+                route.drone_id,
+            ),
+        )
+        routes: list[Route] = []
+        for new_id, route in enumerate(ordered, start=1):
+            moves = [
+                Move(shift[m.turn - 1], new_id, m.token, m.zone, m.in_flight)
+                for m in route.moves
+            ]
+            routes.append(
+                Route(new_id, shift[route.arrival - 1], moves)
+            )
+        return Schedule(routes)
+
     def metrics(self) -> Metrics:
         """Compute the secondary evaluation metrics."""
         rows = self.moves_by_turn()

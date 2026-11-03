@@ -1,4 +1,4 @@
-*This project has been created as part of the 42 curriculum by <login>.*
+*This project has been created as part of the 42 curriculum by gmateus-.*
 
 # Fly-in
 
@@ -16,7 +16,8 @@ flake8 clean. Colored terminal output plus an animated pygame window.
 ## Instructions
 
 ```
-make install                                  # flake8, mypy, pygame
+make install                                  # .venv with flake8, mypy, pygame
+make run                                           # choose a map from a list
 make run MAP=maps/hard/01_maze_nightmare.txt       # text + window
 make run-text MAP=maps/hard/01_maze_nightmare.txt  # text only
 make debug MAP=maps/easy/01_linear_path.txt   # pdb
@@ -47,7 +48,10 @@ terminal (not when the output is piped) and the animation starts alone. If
 pygame or the display is missing, a warning is shown and the text output is
 still produced.
 
-Window keys: LEFT / RIGHT step, SPACE pause / play, R replay, ESC quit.
+Window keys: LEFT / RIGHT step, SPACE pause / play, R replay, mouse wheel
+or + / - zoom (0 resets), ESC quit. Zones have a shape by type (circle
+normal, diamond priority, square restricted, cross blocked, double ring
+start / end), so the type is readable without relying on colors.
 
 ## Project structure
 
@@ -64,12 +68,15 @@ fly_in/core/timetable.py         Schedule, Metrics
 fly_in/network/topology.py       Network (adjacency, Dijkstra distances)
 fly_in/network/reservations.py   Reservations (zone / link usage per turn)
 fly_in/loading/map_reader.py     MapReader, ParseError (line + cause)
+fly_in/loading/map_catalog.py    MapCatalog (lists the maps, asks for one)
 fly_in/routing/space_time.py     SpaceTimePlanner (A* over zone and turn)
 fly_in/routing/fleet_planner.py  FleetPlanner (greedy plan + local search)
 fly_in/checking/output_checker.py  OutputChecker (re-checks the output)
 fly_in/playback/replay.py        Replay (turn snapshots)
 fly_in/display/console.py        ConsoleRenderer (colors, board, stats)
 fly_in/display/window.py         WindowRenderer (pygame)
+fly_in/display/palette.py        Palette (any color word -> display color)
+fly_in/display/errors.py         DisplayError
 fly_in/display/geometry.py       Layout, FleetTimeline (no pygame)
 .flake8, mypy.ini, Makefile, .gitignore
 ```
@@ -85,7 +92,12 @@ fly_in/display/geometry.py       Layout, FleetTimeline (no pygame)
   restricted move), in both directions, so two drones never swap through a
   capacity 1 link.
 * `start_hub` and `end_hub` have no capacity limit (`max_drones` there is
-  accepted and ignored). Delivered drones are no longer tracked.
+  ignored, its value is not validated). Delivered drones are no longer tracked.
+* Drones are identical, so before printing they are renumbered by order of
+  arrival (D1 is the first one delivered) and turns in which nothing moves are
+  removed.
+* Any word is accepted as a `color`. Known names have a fixed color; any other
+  word gets a stable color computed from the word, so it is always visible.
 * Blocked zones are never entered. Between routes with the same arrival turn,
   the one through more priority zones is preferred.
 
@@ -137,6 +149,10 @@ shows turns equal to the lower bound.
   states with `turn + h` not above the arrival turn are visited.
 * Greedy phase O(N V H d log(V H)); the optimisation phase is bounded by
   `--time-limit` / `--iterations`.
+* Measured (greedy phase, 20 zones): about 5 to 8 s for 500 drones, the time
+  grows roughly with the square of the number of drones, because each drone
+  is searched against the reservations of all the previous ones. Any number of
+  drones is accepted, a very large fleet is just slow.
 * Memory O(V H) per search (freed afterwards) plus the reservation table, O(total
   path length). Paths are not cached: each drone is planned against the live
   reservations, which is what keeps them conflict-free.

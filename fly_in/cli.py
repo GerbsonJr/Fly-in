@@ -7,16 +7,17 @@ import os
 import sys
 from typing import Optional, Sequence
 
-from fly_in.routing.space_time import SchedulingError
+from fly_in.checking.output_checker import OutputChecker, CheckError
 from fly_in.core.settings import ASSETS_DIR
-from fly_in.network.topology import Network
 from fly_in.core.timetable import Schedule
-from fly_in.loading.map_reader import MapReader, ParseError
 from fly_in.display.console import ConsoleRenderer
 from fly_in.display.errors import DisplayError
-from fly_in.routing.fleet_planner import FleetPlanner
+from fly_in.loading.map_catalog import MapCatalog
+from fly_in.loading.map_reader import MapReader, ParseError
+from fly_in.network.topology import Network
 from fly_in.playback.replay import Replay
-from fly_in.checking.output_checker import OutputChecker, CheckError
+from fly_in.routing.fleet_planner import FleetPlanner
+from fly_in.routing.space_time import SchedulingError
 
 
 class Application:
@@ -34,7 +35,10 @@ class Application:
             usage="python3 main.py <map> [options]",
             description="Route a fleet of drones from start to end.",
         )
-        parser.add_argument("map", help="path of the map file")
+        parser.add_argument(
+            "map", nargs="?", default=None,
+            help="path of the map file (omit it to choose from a list)",
+        )
         parser.add_argument(
             "--color", choices=("auto", "always", "never"), default="auto",
             help="colored output (default: auto, only on a terminal)",
@@ -81,6 +85,7 @@ class Application:
     @staticmethod
     def _open_gui(graph: Network, schedule: Schedule, nb_drones: int) -> None:
         """Open the optional pygame window (pygame must be installed)."""
+        os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
         try:
             from fly_in.display.window import WindowRenderer
         except ImportError as exc:
@@ -111,11 +116,28 @@ class Application:
                 raise
             sys.stderr.write(f"Warning: no window shown ({exc})\n")
 
+    def _select_map(self, given: Optional[str]) -> Optional[str]:
+        """Return the map to use: the given one or a choice from a list."""
+        if given is not None:
+            return given
+        if not sys.stdin.isatty():
+            self._arg_parser.error(
+                "the map file is required (or run in a terminal to choose)"
+            )
+        return MapCatalog().choose()
+
     def run(self, argv: Optional[Sequence[str]] = None) -> int:
         """Run the program and return the process exit code."""
         args = self._arg_parser.parse_args(argv)
+        if args.time_limit < 0 or args.iterations < 0:
+            self._arg_parser.error(
+                "--time-limit and --iterations cannot be negative"
+            )
         try:
-            data = MapReader().parse_file(args.map)
+            path = self._select_map(args.map)
+            if path is None:
+                return 0
+            data = MapReader().parse_file(path)
             scheduler = FleetPlanner(
                 data.graph,
                 data.nb_drones,

@@ -6,6 +6,7 @@ PROJECT_ROOT: str = os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)
 )))
 ASSETS_DIR: str = os.path.join(PROJECT_ROOT, "assets")
+MAPS_DIR: str = os.path.join(PROJECT_ROOT, "maps")
 
 UNLIMITED: int = 10 ** 9
 """Capacity used for zones without a limit (start and end hubs)."""
@@ -67,5 +68,24 @@ RGB_COLORS: dict[str, tuple[int, int, int]] = {
     "navy": (30, 40, 120),
     "darkred": (140, 20, 20),
     "rainbow": (200, 100, 200),
+    "silver": (192, 192, 192),
+    "olive": (128, 128, 0),
+    "indigo": (75, 0, 130),
+    "turquoise": (64, 224, 208),
+    "coral": (255, 127, 80),
+    "salmon": (250, 128, 114),
+    "khaki": (195, 176, 110),
+    "beige": (225, 215, 185),
+    "tan": (210, 180, 140),
+    "lavender": (180, 160, 235),
+    "skyblue": (110, 190, 240),
+    "lightblue": (150, 200, 245),
+    "lightgreen": (140, 225, 140),
+    "darkgreen": (20, 100, 40),
+    "darkblue": (20, 30, 140),
+    "lightgray": (200, 200, 200),
+    "lightgrey": (200, 200, 200),
+    "darkgray": (80, 80, 80),
+    "darkgrey": (80, 80, 80),
 }
 """Colors used by the graphical window (default: a neutral gray-blue)."""

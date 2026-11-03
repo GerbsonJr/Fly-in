@@ -3,14 +3,36 @@
 from __future__ import annotations
 
 import heapq
-from typing import Optional
+from typing import NamedTuple, Optional
 
-from fly_in.core.links import Connection, make_link_key
+from fly_in.core.links import Connection
 from fly_in.core.zones import Zone
 
 
 class NetworkError(ValueError):
     """Raised when the network is built in an inconsistent way."""
+
+
+class Hop(NamedTuple):
+    """A possible movement from a zone, with its precomputed data.
+
+    Attributes:
+        zone: The destination zone.
+        name: Name of the destination zone.
+        connection: The connection used.
+        cost: Turns needed to enter the destination (1 or 2).
+        capacity: Capacity of the destination zone.
+        link_key: Order independent key of the connection.
+        link_capacity: Capacity of the connection.
+    """
+
+    zone: Zone
+    name: str
+    connection: Connection
+    cost: int
+    capacity: int
+    link_key: tuple[str, str]
+    link_capacity: int
 
 
 class Network:
@@ -23,6 +45,7 @@ class Network:
         self._adjacency: dict[str, list[tuple[Zone, Connection]]] = {}
         self._start: Optional[Zone] = None
         self._end: Optional[Zone] = None
+        self._hops: dict[str, list[Hop]] = {}
 
     # ------------------------------------------------------------ building
     def add_zone(self, zone: Zone) -> None:
@@ -43,6 +66,7 @@ class Network:
             self._end = zone
         self._zones[zone.name] = zone
         self._adjacency[zone.name] = []
+        self._hops.clear()
 
     def add_connection(self, connection: Connection) -> None:
         """Add a bidirectional connection between two known zones.
@@ -64,6 +88,7 @@ class Network:
         zone_b = self._zones[connection.zone_b]
         self._adjacency[zone_a.name].append((zone_b, connection))
         self._adjacency[zone_b.name].append((zone_a, connection))
+        self._hops.clear()
 
     # ------------------------------------------------------------- queries
     @property
@@ -110,7 +135,7 @@ class Network:
         self, name_a: str, name_b: str
     ) -> Optional[Connection]:
         """Return the connection between two zones, if there is one."""
-        return self._connections.get(make_link_key(name_a, name_b))
+        return self._connections.get(Connection.make_key(name_a, name_b))
 
     def neighbors(self, name: str) -> list[tuple[Zone, Connection]]:
         """Return the zones a drone can enter from ``name`` (no blocked)."""
@@ -119,6 +144,29 @@ class Network:
             for zone, conn in self._adjacency[name]
             if zone.zone_type.is_enterable
         ]
+
+    def hops(self, name: str) -> list[Hop]:
+        """Return the movements available from ``name`` (cached).
+
+        Blocked zones are not included. The list is built once per zone,
+        which keeps the pathfinding inner loop cheap.
+        """
+        cached = self._hops.get(name)
+        if cached is None:
+            cached = [
+                Hop(
+                    zone,
+                    zone.name,
+                    conn,
+                    zone.zone_type.move_cost,
+                    zone.capacity,
+                    conn.key,
+                    conn.max_link_capacity,
+                )
+                for zone, conn in self.neighbors(name)
+            ]
+            self._hops[name] = cached
+        return cached
 
     def distances_to_end(self) -> dict[str, int]:
         """Return the minimum movement cost from each zone to the end.

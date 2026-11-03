@@ -7,12 +7,12 @@ from typing import Optional
 
 import pygame
 
-from fly_in.core.settings import RGB_COLORS
 from fly_in.network.topology import Network
 from fly_in.core.timetable import Schedule
 from fly_in.core.zones import Zone, ZoneType
 from fly_in.display.errors import DisplayError
 from fly_in.display.geometry import FleetTimeline, Layout
+from fly_in.display.palette import Palette
 
 Color = tuple[int, int, int]
 
@@ -43,11 +43,13 @@ class WindowRenderer:
         self._nb_drones = nb_drones
         self._assets_dir = assets_dir
         self._lines = schedule.to_lines()
+        self._palette = Palette()
         self._timeline = FleetTimeline(graph, schedule)
         self._layout = Layout(graph, self.WIDTH, self.HEIGHT, self.MARGIN)
         self._turn = 0
         self._previous = 0
         self._auto = True
+        self._zoom = 1.0
         self._anim_start = 0
         self._last_step = 0
         self._screen: Optional[pygame.Surface] = None
@@ -101,6 +103,8 @@ class WindowRenderer:
                     running = False
                 elif event.type == pygame.KEYDOWN:
                     running = self._on_key(event.key, now) and running
+                elif event.type == pygame.MOUSEWHEEL:
+                    self._change_zoom(1.15 ** event.y)
             if self._auto and now - self._last_step > self.AUTO_MS:
                 if self._turn < self._timeline.turns:
                     self._step(1, now)
@@ -125,7 +129,24 @@ class WindowRenderer:
             self._turn = self._previous = 0
             self._auto = True
             self._anim_start = now
+        elif key in (pygame.K_PLUS, pygame.K_EQUALS):
+            self._change_zoom(1.15)
+        elif key == pygame.K_MINUS:
+            self._change_zoom(1 / 1.15)
+        elif key == pygame.K_0:
+            self._zoom = 1.0
         return True
+
+    def _change_zoom(self, factor: float) -> None:
+        """Zoom in or out around the center of the window."""
+        self._zoom = max(0.4, min(self._zoom * factor, 4.0))
+
+    def _project(self, x: float, y: float) -> tuple[float, float]:
+        """World coordinates -> pixels, including the zoom."""
+        base_x, base_y = self._layout.to_screen(x, y)
+        center_x, center_y = self.WIDTH / 2, self.HEIGHT / 2
+        return (center_x + (base_x - center_x) * self._zoom,
+                center_y + (base_y - center_y) * self._zoom)
 
     def _step(self, delta: int, now: int) -> None:
         """Move to another turn and restart the animation."""
@@ -138,15 +159,14 @@ class WindowRenderer:
 
     def _color_of(self, zone: Zone) -> Color:
         """Return the fill color of a zone."""
-        if zone.color is None:
-            return self.DEFAULT_COLOR
-        return RGB_COLORS.get(zone.color.lower(), self.DEFAULT_COLOR)
+        return self._palette.rgb(zone.color, self.DEFAULT_COLOR)
 
     def _zone_radius(self, zone: Zone) -> int:
         """Return the drawing radius of a zone (bigger = more capacity)."""
+        scale = self._zoom ** 0.5
         if zone.is_start or zone.is_end:
-            return 30
-        return 16 + 3 * min(zone.max_drones, 5)
+            return int(30 * scale)
+        return int((16 + 3 * min(zone.max_drones, 5)) * scale)
 
     # ----------------------------------------------------------- drawing
     def _draw(self, progress: float) -> None:
@@ -169,8 +189,8 @@ class WindowRenderer:
         for conn in self._graph.connections:
             zone_a = self._graph.zone(conn.zone_a)
             zone_b = self._graph.zone(conn.zone_b)
-            point_a = self._layout.to_screen(zone_a.x, zone_a.y)
-            point_b = self._layout.to_screen(zone_b.x, zone_b.y)
+            point_a = self._project(zone_a.x, zone_a.y)
+            point_b = self._project(zone_b.x, zone_b.y)
             blocked = (zone_a.zone_type is ZoneType.BLOCKED
                        or zone_b.zone_type is ZoneType.BLOCKED)
             color: Color = (70, 70, 80) if blocked else (150, 155, 175)
@@ -185,7 +205,11 @@ class WindowRenderer:
                 screen.blit(label, (mid[0] + 4, mid[1] - 18))
 
     def _draw_zones(self, screen: pygame.Surface) -> None:
-        """Draw the zones with a border that shows their type."""
+        """Draw the zones; the shape and the border show the type.
+
+        Circle: normal. Diamond: priority. Square: restricted. Circle with
+        a cross: blocked. A second ring marks the start and the end.
+        """
         borders: dict[ZoneType, Color] = {
             ZoneType.NORMAL: (235, 235, 235),
             ZoneType.PRIORITY: (80, 240, 240),
@@ -193,32 +217,42 @@ class WindowRenderer:
             ZoneType.BLOCKED: (15, 15, 15),
         }
         for zone in self._graph.zones:
-            x, y = self._layout.to_screen(zone.x, zone.y)
-            center = (int(x), int(y))
+            x, y = self._project(zone.x, zone.y)
+            cx, cy = int(x), int(y)
             radius = self._zone_radius(zone)
-            pygame.draw.circle(screen, self._color_of(zone), center, radius)
-            pygame.draw.circle(screen, borders[zone.zone_type], center,
-                               radius, 4)
+            fill = self._color_of(zone)
+            border = borders[zone.zone_type]
+            if zone.zone_type is ZoneType.PRIORITY:
+                points = [(cx, cy - radius), (cx + radius, cy),
+                          (cx, cy + radius), (cx - radius, cy)]
+                pygame.draw.polygon(screen, fill, points)
+                pygame.draw.polygon(screen, border, points, 4)
+            elif zone.zone_type is ZoneType.RESTRICTED:
+                box = pygame.Rect(cx - radius, cy - radius,
+                                  2 * radius, 2 * radius)
+                pygame.draw.rect(screen, fill, box)
+                pygame.draw.rect(screen, border, box, 4)
+            else:
+                pygame.draw.circle(screen, fill, (cx, cy), radius)
+                pygame.draw.circle(screen, border, (cx, cy), radius, 4)
+            if zone.is_start or zone.is_end:
+                pygame.draw.circle(screen, (255, 255, 255), (cx, cy),
+                                   radius + 7, 2)
             if zone.zone_type is ZoneType.BLOCKED:
-                pygame.draw.line(screen, (255, 255, 255),
-                                 (center[0] - radius // 2,
-                                  center[1] - radius // 2),
-                                 (center[0] + radius // 2,
-                                  center[1] + radius // 2), 3)
-                pygame.draw.line(screen, (255, 255, 255),
-                                 (center[0] - radius // 2,
-                                  center[1] + radius // 2),
-                                 (center[0] + radius // 2,
-                                  center[1] - radius // 2), 3)
+                half = radius // 2
+                for dy in (-half, half):
+                    pygame.draw.line(screen, (255, 255, 255),
+                                     (cx - half, cy - dy),
+                                     (cx + half, cy + dy), 3)
             if self._small is not None:
                 label = self._small.render(zone.name, True, (255, 255, 255))
-                screen.blit(label, (center[0] - label.get_width() // 2,
-                                    center[1] + radius + 4))
+                screen.blit(label, (cx - label.get_width() // 2,
+                                    cy + radius + 8))
 
     def _screen_pos(self, pose_x: float, pose_y: float, slot: int,
                     count: int) -> tuple[float, float]:
         """Return the pixel position of a pose, with the sharing offset."""
-        base_x, base_y = self._layout.to_screen(pose_x, pose_y)
+        base_x, base_y = self._project(pose_x, pose_y)
         off_x, off_y = Layout.slot_offset(slot, count)
         return (base_x + off_x, base_y + off_y)
 
@@ -269,7 +303,14 @@ class WindowRenderer:
             )
             screen.blit(moves, (20, self.HEIGHT - 52))
         help_text = self._small.render(
-            "LEFT/RIGHT: step   SPACE: pause/play   R: replay   ESC: quit",
+            "LEFT/RIGHT: step   SPACE: pause/play   R: replay   "
+            "WHEEL or +/-: zoom   ESC: quit",
             True, (170, 170, 190),
         )
         screen.blit(help_text, (20, self.HEIGHT - 28))
+        legend = self._small.render(
+            "circle: normal   diamond: priority   square: restricted   "
+            "cross: blocked   double ring: start / end",
+            True, (170, 170, 190),
+        )
+        screen.blit(legend, (20, 52))
