@@ -305,12 +305,12 @@ class WindowRenderer:
         help_text = self._small.render(
             "LEFT/RIGHT: step   SPACE: pause/play   R: replay   "
             "WHEEL or +/-: zoom   ESC: quit",
-            True, (170, 170, 190),
+            True, (255, 160, 60),
         )
         screen.blit(help_text, (20, self.HEIGHT - 28))
         legend = self._small.render(
             "circle: normal   diamond: priority   square: restricted   "
             "cross: blocked   double ring: start / end",
-            True, (170, 170, 190),
+            True, (255, 160, 60),
         )
         screen.blit(legend, (20, 52))
