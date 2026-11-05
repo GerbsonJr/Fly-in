@@ -46,6 +46,7 @@ class Network:
         self._start: Optional[Zone] = None
         self._end: Optional[Zone] = None
         self._hops: dict[str, list[Hop]] = {}
+        self._positions: dict[tuple[int, int], str] = {}
 
     # ------------------------------------------------------------ building
     def add_zone(self, zone: Zone) -> None:
@@ -56,6 +57,12 @@ class Network:
         """
         if zone.name in self._zones:
             raise NetworkError(f"duplicate zone name '{zone.name}'")
+        other = self._positions.get((zone.x, zone.y))
+        if other is not None:
+            raise NetworkError(
+                f"zone '{zone.name}' has the same coordinates "
+                f"({zone.x}, {zone.y}) as zone '{other}'"
+            )
         if zone.is_start:
             if self._start is not None:
                 raise NetworkError("more than one start_hub defined")
@@ -65,6 +72,7 @@ class Network:
                 raise NetworkError("more than one end_hub defined")
             self._end = zone
         self._zones[zone.name] = zone
+        self._positions[(zone.x, zone.y)] = zone.name
         self._adjacency[zone.name] = []
         self._hops.clear()
 

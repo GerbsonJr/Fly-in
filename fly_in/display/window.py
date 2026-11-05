@@ -29,6 +29,7 @@ class WindowRenderer:
     MARGIN = 110
     ANIM_MS = 380
     AUTO_MS = 700
+    BACKDROP_DIM = 100
     DEFAULT_COLOR: Color = (90, 95, 120)
 
     def __init__(
@@ -79,7 +80,12 @@ class WindowRenderer:
         self._small = pygame.font.Font(None, 20)
         self._background = self._load("grid_backdrop.png", self.WIDTH,
                                       self.HEIGHT)
-        self._drone_icon = self._load("drone_icon.png", 38, 38)
+        self._drone_icon = self._load("drone_icon.png", 60, 60)
+        if self._background is not None:
+            shade = pygame.Surface(self._background.get_size())
+            shade.set_alpha(self.BACKDROP_DIM)
+            shade.fill((0, 0, 0))
+            self._background.blit(shade, (0, 0))
         self._last_step = pygame.time.get_ticks()
 
     def _load(self, name: str, width: int, height: int
